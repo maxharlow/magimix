@@ -4,8 +4,10 @@ import org.scalatra.ScalatraServlet
 
 class Dispatcher extends ScalatraServlet {
 
-  get("/") {
-    "hello"
+  get("/index/*") {
+    val contentId = params("splat")
+    Indexer.index(contentId)
+    "ok!"
   }
 
 }
