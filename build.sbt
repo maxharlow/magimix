@@ -5,6 +5,7 @@ scalaVersion := "2.9.1"
 seq(webSettings :_*)
 
 libraryDependencies ++= Seq(
+    "org.jsoup" % "jsoup" % "1.7.2",
     "net.liftweb" %% "lift-json" % "2.5-M4",
     "net.databinder.dispatch" %% "dispatch-core" % "0.9.5",
     "org.scalatra" % "scalatra" % "2.1.1",
