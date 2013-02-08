@@ -24,7 +24,7 @@ object Indexer {
   }
 
   private def retrieveContent(contentId: String): Promise[Either[Throwable, String]] = {
-    val parameters = Map(("api-key" -> guardianContentApiKey), ("show-fields" -> "body"))
+    val parameters = Map("api-key" -> guardianContentApiKey, "show-fields" -> "body")
     val request = guardianContent / contentId <<? parameters
     Http(request OK as.String).either
   }
@@ -44,14 +44,14 @@ object Indexer {
   }
 
   private def retrieveEntities(text: String): Promise[Either[Throwable, xml.Elem]] = {
-    val parameters = Map(("text" -> text),
-        ("confidence" -> "0.2"),
-        ("support" -> "20"),
-        ("spotter" -> "Default"),
-        ("disambiguator" -> "Default"),
-        ("policy" -> "whitelist"),
-        ("types" -> "Person,Organisation,Place"))
-    val headers = Map(("content-type" -> "application/x-www-form-urlencoded"))
+    val parameters = Map("text" -> text,
+        "confidence" -> "0.2",
+        "support" -> "20",
+        "spotter" -> "Default",
+        "disambiguator" -> "Default",
+        "policy" -> "whitelist",
+        "types" -> "Person,Organisation,Place")
+    val headers = Map("content-type" -> "application/x-www-form-urlencoded")
     val request = dbpediaSpotlight / "rest" / "annotate" << parameters <:< headers
     Http(request OK as.xml.Elem).either
   }
