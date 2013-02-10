@@ -5,6 +5,7 @@ scalaVersion := "2.9.1"
 seq(webSettings :_*)
 
 libraryDependencies ++= Seq(
+    "org.apache.jena" % "jena-core" % "2.7.4",
     "org.jsoup" % "jsoup" % "1.7.2",
     "net.liftweb" %% "lift-json" % "2.5-M4",
     "net.databinder.dispatch" %% "dispatch-core" % "0.9.5",
