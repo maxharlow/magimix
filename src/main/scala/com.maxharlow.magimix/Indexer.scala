@@ -29,27 +29,22 @@ object Indexer {
     yield storeModel(model)
   }
 
-  private def retrieveContent(contentId: String): Promise[Either[Throwable, String]] = {
+  private def retrieveContent(contentId: String): Promise[String] = {
     val parameters = Map("api-key" -> guardianContentApiKey, "show-fields" -> "body")
     val request = guardianContent / contentId <<? parameters
-    Http(request OK as.String).either
+    Http(request OK as.String) onFailure { case e => throw e }
   }
 
-  private def parseContent(contentResponse: Either[Throwable, String]): Content = {
+  private def parseContent(contentResponse: String): Content = {
     implicit val formats = DefaultFormats
-    contentResponse match {
-      case Right(json) => {
-        val parsedJson = parse(json)
-        val uri = (parsedJson \\ "webUrl").extract[String]
-        val body = (parsedJson \\ "body").extract[String]
-        val bodyText = Jsoup.parseBodyFragment(body).text()
-        Content(uri, bodyText)
-      }
-      case Left(e) => throw e
-    }
+    val json = parse(contentResponse)
+    val uri = (json \\ "webUrl").extract[String]
+    val body = (json \\ "body").extract[String]
+    val bodyText = Jsoup.parseBodyFragment(body).text()
+    Content(uri, bodyText)
   }
 
-  private def retrieveAnnotation(text: String): Promise[Either[Throwable, xml.Elem]] = {
+  private def retrieveAnnotation(text: String): Promise[xml.Elem] = {
     val parameters = Map("text" -> text,
         "confidence" -> "0.2",
         "support" -> "20",
@@ -59,16 +54,11 @@ object Indexer {
         "types" -> "Person,Organisation,Place")
     val headers = Map("content-type" -> "application/x-www-form-urlencoded")
     val request = dbpediaSpotlight / "rest" / "annotate" << parameters <:< headers
-    Http(request OK as.xml.Elem).either
+    Http(request OK as.xml.Elem) onFailure { case e => throw e }
   }
 
-  private def parseAnnotation(annotationResponse: Either[Throwable, xml.Elem]): Set[String] = {
-    annotationResponse match {
-      case Right(xml) => {
-        (xml \\ "Resource").map(_ \ "@URI" text).toSet
-      }
-      case Left(e) => throw e
-    }
+  private def parseAnnotation(annotationResponse: xml.Elem): Set[String] = {
+    (annotationResponse \\ "Resource").map(_ \ "@URI" text).toSet
   }
 
   private def createModel(content: Content, entityUris: Set[String]): Model = {
@@ -87,13 +77,13 @@ object Indexer {
     Http(request OK as.String) onFailure { case e => throw e }
   }
 
-  private def storeModel(model: Model) {
+  private def storeModel(model: Model): Promise[String] = {
     val out = new StringWriter
     model write out
     val graph = "http://www.guardian.co.uk/"
     val parameters = Map("graph" -> graph, "data" -> out.toString)
     val request = triplestore / "data/" << parameters
-    Http(request OK as.String).either onComplete {
+    Http(request OK as.String) onComplete {
       case Right(_) => println("Stored model for: " + model.listSubjects.nextResource.getURI)
       case Left(e) => throw e
     }
