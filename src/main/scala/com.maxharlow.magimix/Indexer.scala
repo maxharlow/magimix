@@ -1,5 +1,6 @@
 package com.maxharlow.magimix
 
+import com.maxharlow.magimix.Configuration._
 import dispatch._
 import net.liftweb.json._
 import org.jsoup.Jsoup
@@ -9,13 +10,11 @@ import java.io.StringWriter
 
 object Indexer {
 
-  val guardianContentApiKey = "techdev-internal"
-
   case class Content(uri: String, body: String)
 
   def guardianContent = host("content.guardianapis.com")
   def dbpediaSpotlight = host("spotlight.dbpedia.org")
-  def triplestore = host("localhost", 8000)
+  def triplestore = url(triplestoreUri)
 
   def index(contentId: String) {
     for {
@@ -46,12 +45,12 @@ object Indexer {
 
   private def retrieveAnnotation(text: String): Promise[xml.Elem] = {
     val parameters = Map("text" -> text,
-        "confidence" -> "0.2",
-        "support" -> "20",
-        "spotter" -> "Default",
-        "disambiguator" -> "Default",
-        "policy" -> "whitelist",
-        "types" -> "Person,Organisation,Place")
+        "confidence" -> dbpediaSpotlightConfidence.toString,
+        "support" -> dbpediaSpotlightSupport.toString,
+        "spotter" -> dbpediaSpotlightSpotter,
+        "disambiguator" -> dbpediaSpotlightDisambiguator,
+        "policy" -> dbpediaSpotlightPolicy,
+        "types" -> dbpediaSpotlightTypes)
     val headers = Map("content-type" -> "application/x-www-form-urlencoded")
     val request = dbpediaSpotlight / "rest" / "annotate" << parameters <:< headers
     Http(request OK as.xml.Elem) onFailure { case e => throw e }
