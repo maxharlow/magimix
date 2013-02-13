@@ -1,13 +1,13 @@
 package com.maxharlow.magimix
 
-import org.scalatra.ScalatraServlet
+import org.scalatra.{ScalatraServlet, Accepted}
 
 class Dispatcher extends ScalatraServlet {
 
-  get("/index/*") {
+  put("/index/*") {
     val contentId = params("splat")
     Indexer.index(contentId)
-    "ok!"
+    Accepted()
   }
 
 }
