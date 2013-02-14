@@ -10,40 +10,45 @@ import java.io.StringWriter
 
 object Indexer {
 
-  case class Content(uri: String, body: String)
+  case class SourceContent(uri: String, body: String)
+  case class AnnotatedContent(subjects: Set[String])
 
   def guardianContent = host("content.guardianapis.com")
   def dbpediaSpotlight = host("spotlight.dbpedia.org")
   def triplestore = url(triplestoreUri)
 
   def index(contentId: String) {
-    for {
-      contentResponse <- retrieveContent(contentId)
-      content = parseContent(contentResponse)
-      annotationResponse <- retrieveAnnotation(content.body)
-      entityUris = parseAnnotation(annotationResponse)
-      model = createModel(content, entityUris)
-      _ <- deleteModel(content.uri)
+    val result = for {
+      content <- retrieveContent(contentId).right
+      annotation <- retrieveAnnotation(content.body).right
+      _ <- deleteModel(content.uri).right
     }
-    yield storeModel(model)
+    yield {
+      val model = createModel(content, annotation)
+      storeModel(model)
+    }
+    for (r <- result) r match {
+      case Right(_) => println("Indexed content: " + contentId)
+      case Left(e) => println("Failed to index content: " + contentId + " -- " + e.getMessage)
+    }
   }
 
-  private def retrieveContent(contentId: String): Promise[String] = {
+  private def retrieveContent(contentId: String): Promise[Either[Throwable, SourceContent]] = {
     val parameters = Map("api-key" -> guardianContentApiKey, "show-fields" -> "body")
     val request = guardianContent / contentId <<? parameters
-    Http(request OK as.String) onFailure { case e => throw e }
+    Http(request OK as.String).either.right.map(parseContent)
   }
 
-  private def parseContent(contentResponse: String): Content = {
+  private def parseContent(contentResponse: String): SourceContent = {
     implicit val formats = DefaultFormats
     val json = parse(contentResponse)
     val uri = (json \\ "webUrl").extract[String]
     val body = (json \\ "body").extract[String]
     val bodyText = Jsoup.parseBodyFragment(body).text()
-    Content(uri, bodyText)
+    SourceContent(uri, bodyText)
   }
 
-  private def retrieveAnnotation(text: String): Promise[xml.Elem] = {
+  private def retrieveAnnotation(text: String): Promise[Either[Throwable, AnnotatedContent]] = {
     val parameters = Map("text" -> text,
         "confidence" -> dbpediaSpotlightConfidence.toString,
         "support" -> dbpediaSpotlightSupport.toString,
@@ -53,39 +58,37 @@ object Indexer {
         "types" -> dbpediaSpotlightTypes)
     val headers = Map("content-type" -> "application/x-www-form-urlencoded")
     val request = dbpediaSpotlight / "rest" / "annotate" << parameters <:< headers
-    Http(request OK as.xml.Elem) onFailure { case e => throw e }
+    Http(request OK as.xml.Elem).either.right.map(parseAnnotation)
   }
 
-  private def parseAnnotation(annotationResponse: xml.Elem): Set[String] = {
-    (annotationResponse \\ "Resource").map(_ \ "@URI" text).toSet
+  private def parseAnnotation(annotationResponse: xml.Elem): AnnotatedContent = {
+    val subjects = (annotationResponse \\ "Resource").map(_ \ "@URI" text).toSet
+    AnnotatedContent(subjects)
   }
 
-  private def createModel(content: Content, entityUris: Set[String]): Model = {
+  private def createModel(sourceContent: SourceContent, annotatedContent: AnnotatedContent): Model = {
     val model = ModelFactory.createDefaultModel
-    val contentResource = model.createResource(content.uri)
-    for (entityUri <- entityUris) {
-      contentResource.addProperty(DC_11.subject, model.createResource(entityUri))
+    val contentResource = model.createResource(sourceContent.uri)
+    for (subject <- annotatedContent.subjects) {
+      contentResource.addProperty(DC_11.subject, model.createResource(subject))
     }
     model
   }
 
-  private def deleteModel(contentUri: String): Promise[String] = {
+  private def deleteModel(contentUri: String): Promise[Either[Throwable, String]] = {
     val sparql = "DELETE { <%s> ?p ?o } { ?s ?p ?o }" format contentUri
     val parameters = Map("update" -> sparql)
     val request = triplestore / "update/" << parameters
-    Http(request OK as.String) onFailure { case e => throw e }
+    Http(request OK as.String).either
   }
 
-  private def storeModel(model: Model): Promise[String] = {
+  private def storeModel(model: Model): Promise[Either[Throwable, String]] = {
     val out = new StringWriter
     model write out
     val graph = "http://www.guardian.co.uk/"
     val parameters = Map("graph" -> graph, "data" -> out.toString)
     val request = triplestore / "data/" << parameters
-    Http(request OK as.String) onComplete {
-      case Right(_) => println("Stored model for: " + model.listSubjects.nextResource.getURI)
-      case Left(e) => throw e
-    }
+    Http(request OK as.String).either
   }
 
 }
