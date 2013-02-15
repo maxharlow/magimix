@@ -24,12 +24,10 @@ object Indexer {
         content <- retrieveContent(contentId).right
         annotation <- retrieveAnnotation(content.body).right
         _ <- deleteModel(content.uri).right
+        _ <- storeModel(createModel(content, annotation)).right
       }
-      yield {
-        val model = createModel(content, annotation)
-        storeModel(model)
-      }
-      for (r <- result) r match {
+      yield ()
+      result map {
         case Right(_) => println("Indexed content: " + contentId)
         case Left(e) => println("Failed to index content: " + contentId + " -- " + e.getMessage)
       }
