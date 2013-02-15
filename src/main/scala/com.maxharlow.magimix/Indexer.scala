@@ -7,6 +7,7 @@ import org.jsoup.Jsoup
 import com.hp.hpl.jena.rdf.model.{Model, ModelFactory}
 import com.hp.hpl.jena.vocabulary.DC_11
 import java.io.StringWriter
+import scala.actors.Futures.future
 
 object Indexer {
 
@@ -18,18 +19,20 @@ object Indexer {
   def triplestore = url(triplestoreUri)
 
   def index(contentId: String) {
-    val result = for {
-      content <- retrieveContent(contentId).right
-      annotation <- retrieveAnnotation(content.body).right
-      _ <- deleteModel(content.uri).right
-    }
-    yield {
-      val model = createModel(content, annotation)
-      storeModel(model)
-    }
-    for (r <- result) r match {
-      case Right(_) => println("Indexed content: " + contentId)
-      case Left(e) => println("Failed to index content: " + contentId + " -- " + e.getMessage)
+    future {
+      val result = for {
+        content <- retrieveContent(contentId).right
+        annotation <- retrieveAnnotation(content.body).right
+        _ <- deleteModel(content.uri).right
+      }
+      yield {
+        val model = createModel(content, annotation)
+        storeModel(model)
+      }
+      for (r <- result) r match {
+        case Right(_) => println("Indexed content: " + contentId)
+        case Left(e) => println("Failed to index content: " + contentId + " -- " + e.getMessage)
+      }
     }
   }
 
