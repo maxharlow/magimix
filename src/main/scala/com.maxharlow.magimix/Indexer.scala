@@ -11,6 +11,7 @@ import scala.actors.Futures.future
 
 object Indexer {
 
+  case class PaginatedContentIds(currentPage: Int, totalPages: Int, ids: List[String])
   case class SourceContent(uri: String, body: String)
   case class AnnotatedContent(subjects: Set[String])
 
@@ -18,10 +19,13 @@ object Indexer {
   def dbpediaSpotlight = host("spotlight.dbpedia.org")
   def triplestore = url(triplestoreUri)
 
-  def indexAll(query: String = "") {
-    val result = for (contentIds <- retrieveContentIds(query)) yield contentIds
+  def indexAll(query: String = "", page: Int = 1) {
+    val result = for (contentIds <- retrieveContentIds(query, page)) yield contentIds
     result map {
-      case Right(ids) => ids map index
+      case Right(paginatedContentIds) => {
+        paginatedContentIds.ids map index
+        if (paginatedContentIds.currentPage < paginatedContentIds.totalPages) indexAll(query, paginatedContentIds.currentPage + 1)
+      }
       case Left(e) => println("Failed to retrieve content IDs (" + e.getMessage + ")")
     }
   }
@@ -42,20 +46,24 @@ object Indexer {
     }
   }
 
-  private def retrieveContentIds(query: String): Promise[Either[Throwable, List[String]]] = {
+  private def retrieveContentIds(query: String, page: Int): Promise[Either[Throwable, PaginatedContentIds]] = {
     val parameters = Map("api-key" -> guardianContentApiKey,
         "order-by" -> "oldest",
         "page-size" -> "50",
         "tag" -> "type/article",
+        "page" -> page.toString(),
         "q" -> query)
     val request = guardianContent / "search" <<? parameters
     Http(request OK as.String).either.right.map(parseContentIds)
   }
 
-  private def parseContentIds(contentIdsResponse: String): List[String] = {
+  private def parseContentIds(contentIdsResponse: String): PaginatedContentIds = {
     implicit val formats = DefaultFormats
     val json = parse(contentIdsResponse)
-    (json \\ "id" children).map(_ \ classOf[JString] head)
+    val currentPage = (json \\ "currentPage").extract[Int]
+    val totalPages = (json \\ "pages").extract[Int]
+    val ids = (json \\ "id" children).map(_ \ classOf[JString] head)
+    PaginatedContentIds(currentPage, totalPages, ids)
   }
 
   private def retrieveContent(contentId: String): Promise[Either[Throwable, SourceContent]] = {
