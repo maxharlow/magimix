@@ -18,6 +18,14 @@ object Indexer {
   def dbpediaSpotlight = host("spotlight.dbpedia.org")
   def triplestore = url(triplestoreUri)
 
+  def indexAll(query: String = "") {
+    val result = for (contentIds <- retrieveContentIds(query)) yield contentIds
+    result map {
+      case Right(ids) => ids map index
+      case Left(e) => println("Failed to retrieve content IDs (" + e.getMessage + ")")
+    }
+  }
+
   def index(contentId: String) {
     future {
       val result = for {
@@ -29,9 +37,25 @@ object Indexer {
       yield ()
       result map {
         case Right(_) => println("Indexed content: " + contentId)
-        case Left(e) => println("Failed to index content: " + contentId + " -- " + e.getMessage)
+        case Left(e) => println("Failed to index content: " + contentId + " (" + e.getMessage + ")")
       }
     }
+  }
+
+  private def retrieveContentIds(query: String): Promise[Either[Throwable, List[String]]] = {
+    val parameters = Map("api-key" -> guardianContentApiKey,
+        "order-by" -> "oldest",
+        "page-size" -> "50",
+        "tag" -> "type/article",
+        "q" -> query)
+    val request = guardianContent / "search" <<? parameters
+    Http(request OK as.String).either.right.map(parseContentIds)
+  }
+
+  private def parseContentIds(contentIdsResponse: String): List[String] = {
+    implicit val formats = DefaultFormats
+    val json = parse(contentIdsResponse)
+    (json \\ "id" children).map(_ \ classOf[JString] head)
   }
 
   private def retrieveContent(contentId: String): Promise[Either[Throwable, SourceContent]] = {

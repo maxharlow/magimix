@@ -10,4 +10,10 @@ class Dispatcher extends ScalatraServlet {
     Accepted()
   }
 
+  post("/index") {
+    val query = params.getOrElse("query", "")
+    Indexer.indexAll(query)
+    Accepted()
+  }
+
 }
