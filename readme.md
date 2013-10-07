@@ -23,7 +23,6 @@ You can check it's running by going to `localhost:8000/status`.
 
 Start Magimix itself:
 
-	$ sbt
-	> container:start
+	$ sbt run
 
 New content can be indexed by issuing a PUT to `localhost:8080/index/<ID>` with the content's ID. If that content is already in the index, existing triples will be removed first.
