@@ -2,12 +2,14 @@ package com.maxharlow.magimix
 
 import com.maxharlow.magimix.Configuration._
 import dispatch._
-import net.liftweb.json._
+import dispatch.Defaults._
+import org.json4s._
+import org.json4s.native.JsonMethods._
 import org.jsoup.Jsoup
 import com.hp.hpl.jena.rdf.model.{Model, ModelFactory}
 import com.hp.hpl.jena.vocabulary.DC_11
 import java.io.StringWriter
-import scala.actors.Futures.future
+import scala.concurrent.future
 
 object Indexer {
 
@@ -46,7 +48,7 @@ object Indexer {
     }
   }
 
-  private def retrieveContentIds(query: String, page: Int): Promise[Either[Throwable, PaginatedContentIds]] = {
+  private def retrieveContentIds(query: String, page: Int): Future[Either[Throwable, PaginatedContentIds]] = {
     val parameters = Map("api-key" -> guardianContentApiKey,
         "order-by" -> "oldest",
         "page-size" -> "50",
@@ -66,7 +68,7 @@ object Indexer {
     PaginatedContentIds(currentPage, totalPages, ids)
   }
 
-  private def retrieveContent(contentId: String): Promise[Either[Throwable, SourceContent]] = {
+  private def retrieveContent(contentId: String): Future[Either[Throwable, SourceContent]] = {
     val parameters = Map("api-key" -> guardianContentApiKey, "show-fields" -> "body")
     val request = guardianContent / contentId <<? parameters
     Http(request OK as.String).either.right.map(parseContent)
@@ -81,7 +83,7 @@ object Indexer {
     SourceContent(uri, bodyText)
   }
 
-  private def retrieveAnnotation(text: String): Promise[Either[Throwable, AnnotatedContent]] = {
+  private def retrieveAnnotation(text: String): Future[Either[Throwable, AnnotatedContent]] = {
     val parameters = Map("text" -> text,
         "confidence" -> dbpediaSpotlightConfidence.toString,
         "support" -> dbpediaSpotlightSupport.toString,
@@ -108,14 +110,14 @@ object Indexer {
     model
   }
 
-  private def deleteModel(contentUri: String): Promise[Either[Throwable, String]] = {
+  private def deleteModel(contentUri: String): Future[Either[Throwable, String]] = {
     val sparql = "DELETE { <%s> ?p ?o } { ?s ?p ?o }" format contentUri
     val parameters = Map("update" -> sparql)
     val request = triplestore / "update/" << parameters
     Http(request OK as.String).either
   }
 
-  private def storeModel(model: Model): Promise[Either[Throwable, String]] = {
+  private def storeModel(model: Model): Future[Either[Throwable, String]] = {
     val out = new StringWriter
     model write out
     val graph = "http://www.guardian.co.uk/"
